@@ -2,7 +2,7 @@ import os
 import streamlit as st
 import pickle
 import time
-from langchain.chat_models import ChatOpenAI  # <-- changed
+from langchain import OpenAI  # <-- works with langchain==0.0.312
 from langchain.chains import RetrievalQAWithSourcesChain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import UnstructuredURLLoader
@@ -10,7 +10,7 @@ from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
 from dotenv import load_dotenv
 
-load_dotenv()  # take environment variables from .env (especially openai api key)
+load_dotenv()  # take environment variables from .env
 
 st.title("News Research Tool 📈")
 st.sidebar.title("News Article URLs")
