@@ -1,9 +1,10 @@
 import streamlit as st
-from langchain_community.document_loaders import UnstructuredURLLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQAWithSourcesChain
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.document_loaders import UnstructuredURLLoader
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import FAISS
+from langchain.chat_models import ChatOpenAI
 import os
 import pickle
 from dotenv import load_dotenv
