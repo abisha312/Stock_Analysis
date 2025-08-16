@@ -4,85 +4,75 @@ import pickle
 import time
 from dotenv import load_dotenv
 
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings   # ✅ updated imports
+# ✅ Updated imports for langchain==0.0.312
 from langchain.chains import RetrievalQAWithSourcesChain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import UnstructuredURLLoader
+from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
+from langchain_community.chat_models import ChatOpenAI  # <-- FIXED import
 
 # Load environment variables
 load_dotenv()
-openai_api_key = os.getenv("OPENAI_API_KEY")
 
-st.title("Stock Analysis Chatbot 📈")
-st.sidebar.title("Settings")
+st.title("News Research Tool 📈")
+st.sidebar.title("News Article URLs")
 
-# URLs input
-urls = st.sidebar.text_area("Enter article URLs (comma separated)")
+urls = []
+for i in range(3):
+    url = st.sidebar.text_input(f"URL {i+1}")
+    urls.append(url)
+
 process_url_clicked = st.sidebar.button("Process URLs")
+file_path = "faiss_store_openai.pkl"
 
-# Vector store filename
-VECTOR_STORE_PATH = "vectorstore.pkl"
+main_placeholder = st.empty()
+llm = ChatOpenAI(temperature=0.9, model_name="gpt-3.5-turbo", max_tokens=500)
 
 if process_url_clicked:
-    with st.spinner("Loading and processing documents..."):
-        try:
-            url_list = [url.strip() for url in urls.split(",") if url.strip()]
-            loader = UnstructuredURLLoader(urls=url_list)
-            data = loader.load()
+    loader = UnstructuredURLLoader(urls=urls)
+    main_placeholder.text("Data Loading...Started...✅✅✅")
+    data = loader.load()
 
-            # Split text
-            text_splitter = RecursiveCharacterTextSplitter(
-                separators=["\n\n", "\n", ".", "?", "!"],
-                chunk_size=1000,
-                chunk_overlap=150
-            )
-            docs = text_splitter.split_documents(data)
+    text_splitter = RecursiveCharacterTextSplitter(
+        separators=['\n\n', '\n', '.', ','],
+        chunk_size=1000
+    )
+    main_placeholder.text("Text Splitter...Started...✅✅✅")
+    docs = text_splitter.split_documents(data)
 
-            # Create embeddings and vector store
-            embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
-            vectorstore = FAISS.from_documents(docs, embeddings)
+    embeddings = OpenAIEmbeddings()
+    vectorstore_openai = FAISS.from_documents(docs, embeddings)
+    pkl = vectorstore_openai.serialize_to_bytes()
+    main_placeholder.text("Embedding Vector Started Building...✅✅✅")
+    time.sleep(2)
 
-            # Save vectorstore
-            with open(VECTOR_STORE_PATH, "wb") as f:
-                pickle.dump(vectorstore, f)
+    with open(file_path, "wb") as f:
+        pickle.dump(pkl, f)
 
-            st.success("Documents processed and saved!")
+query = main_placeholder.text_input("Question:")
 
-        except Exception as e:
-            st.error(f"Error: {str(e)}")
-
-# Ask questions
-query = st.text_input("Ask a question about the documents")
 if query:
-    if os.path.exists(VECTOR_STORE_PATH):
-        with st.spinner("Searching for an answer..."):
-            try:
-                with open(VECTOR_STORE_PATH, "rb") as f:
-                    vectorstore = pickle.load(f)
+    if os.path.exists(file_path):
+        with open(file_path, "rb") as f:
+            pkl = pickle.load(f)
+            vectorstore = FAISS.deserialize_from_bytes(
+                embeddings=OpenAIEmbeddings(),
+                serialized=pkl,
+                allow_dangerous_deserialization=True
+            )
+            chain = RetrievalQAWithSourcesChain.from_llm(
+                llm=llm,
+                retriever=vectorstore.as_retriever()
+            )
+            result = chain({"question": query}, return_only_outputs=True)
 
-                llm = ChatOpenAI(
-                    temperature=0.7,
-                    model="gpt-3.5-turbo",
-                    openai_api_key=openai_api_key,
-                    max_tokens=500
-                )
+            st.header("Answer")
+            st.write(result["answer"])
 
-                chain = RetrievalQAWithSourcesChain.from_chain_type(
-                    llm=llm,
-                    retriever=vectorstore.as_retriever()
-                )
-
-                result = chain({"question": query}, return_only_outputs=True)
-
-                st.subheader("Answer")
-                st.write(result["answer"])
-
-                if result.get("sources"):
-                    st.subheader("Sources")
-                    st.write(result["sources"])
-
-            except Exception as e:
-                st.error(f"Error: {str(e)}")
-    else:
-        st.warning("Please process URLs first.")
+            sources = result.get("sources", "")
+            if sources:
+                st.subheader("Sources:")
+                sources_list = sources.split("\n")
+                for source in sources_list:
+                    st.write(source)
