@@ -6,10 +6,8 @@ from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
 from langchain.chat_models import ChatOpenAI
 import os
-import pickle
-from dotenv import load_dotenv
 
-# Load environment variables
+# ✅ Load API key from Streamlit secrets (safe for Streamlit Cloud)
 os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
 
 st.set_page_config(page_title="News Research Tool", layout="wide")
@@ -20,7 +18,6 @@ st.sidebar.header("Configuration")
 urls = []
 for i in range(3):
     url = st.sidebar.text_input(f"News URL {i+1}")
-
     if url:
         urls.append(url)
 
@@ -63,12 +60,14 @@ if query:
         st.error("No knowledge base found. Please process URLs first.")
     else:
         embeddings = OpenAIEmbeddings()
-        vectorstore = FAISS.load_local(file_path, embeddings, allow_dangerous_deserialization=True)
+        vectorstore = FAISS.load_local(
+            file_path, embeddings, allow_dangerous_deserialization=True
+        )
 
         llm = ChatOpenAI(
             model_name="gpt-3.5-turbo",
             temperature=0,
-            max_completion_tokens=500  # updated param
+            max_tokens=500  # ✅ fixed param name
         )
 
         chain = RetrievalQAWithSourcesChain.from_llm(
