@@ -1,78 +1,88 @@
-import os
 import streamlit as st
-import pickle
-import time
-from dotenv import load_dotenv
-
-# ✅ Correct imports for langchain==0.0.312 + new packages
-from langchain.chains import RetrievalQAWithSourcesChain
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.chat_models import ChatOpenAI
-from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import UnstructuredURLLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_community.vectorstores import FAISS
+from langchain.chains import RetrievalQAWithSourcesChain
+import os
+import pickle
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-st.title("News Research Tool 📈")
-st.sidebar.title("News Article URLs")
+st.set_page_config(page_title="News Research Tool", layout="wide")
+st.title("📰 News Research Tool")
+st.sidebar.header("Configuration")
 
+# Sidebar inputs
 urls = []
 for i in range(3):
-    url = st.sidebar.text_input(f"URL {i+1}")
-    urls.append(url)
+    url = st.sidebar.text_input(f"News URL {i+1}")
+
+    if url:
+        urls.append(url)
 
 process_url_clicked = st.sidebar.button("Process URLs")
-file_path = "faiss_store_openai.pkl"
 
-main_placeholder = st.empty()
-llm = ChatOpenAI(temperature=0.9, model="gpt-3.5-turbo", max_tokens=500)
+file_path = "faiss_index"
 
+# Process URLs
 if process_url_clicked:
-    loader = UnstructuredURLLoader(urls=urls)
-    main_placeholder.text("Data Loading...Started...✅✅✅")
-    data = loader.load()
+    if not urls:
+        st.sidebar.error("Please enter at least one URL.")
+    else:
+        st.sidebar.write("Loading articles...")
 
-    text_splitter = RecursiveCharacterTextSplitter(
-        separators=['\n\n', '\n', '.', ','],
-        chunk_size=1000
-    )
-    main_placeholder.text("Text Splitter...Started...✅✅✅")
-    docs = text_splitter.split_documents(data)
+        loader = UnstructuredURLLoader(urls=urls)
+        data = loader.load()
 
-    embeddings = OpenAIEmbeddings()
-    vectorstore_openai = FAISS.from_documents(docs, embeddings)
-    pkl = vectorstore_openai.serialize_to_bytes()
-    main_placeholder.text("Embedding Vector Started Building...✅✅✅")
-    time.sleep(2)
+        st.sidebar.write("Splitting text...")
+        text_splitter = RecursiveCharacterTextSplitter(
+            separators=["\n\n", "\n", ".", ","],
+            chunk_size=1000,
+            chunk_overlap=100,
+        )
+        docs = text_splitter.split_documents(data)
 
-    with open(file_path, "wb") as f:
-        pickle.dump(pkl, f)
+        st.sidebar.write("Creating embeddings...")
+        embeddings = OpenAIEmbeddings()
+        vectorstore = FAISS.from_documents(docs, embeddings)
 
-query = main_placeholder.text_input("Question:")
+        # Save locally
+        vectorstore.save_local(file_path)
+
+        st.sidebar.success("Processing completed!")
+
+# User Query
+query = st.text_input("Ask a question about the articles:")
 
 if query:
-    if os.path.exists(file_path):
-        with open(file_path, "rb") as f:
-            pkl = pickle.load(f)
-            vectorstore = FAISS.deserialize_from_bytes(
-                embeddings=OpenAIEmbeddings(),
-                serialized=pkl,
-                allow_dangerous_deserialization=True
-            )
-            chain = RetrievalQAWithSourcesChain.from_llm(
-                llm=llm,
-                retriever=vectorstore.as_retriever()
-            )
-            result = chain({"question": query}, return_only_outputs=True)
+    if not os.path.exists(file_path):
+        st.error("No knowledge base found. Please process URLs first.")
+    else:
+        embeddings = OpenAIEmbeddings()
+        vectorstore = FAISS.load_local(file_path, embeddings, allow_dangerous_deserialization=True)
 
-            st.header("Answer")
-            st.write(result["answer"])
+        llm = ChatOpenAI(
+            model_name="gpt-3.5-turbo",
+            temperature=0,
+            max_completion_tokens=500  # updated param
+        )
 
-            sources = result.get("sources", "")
-            if sources:
-                st.subheader("Sources:")
-                sources_list = sources.split("\n")
-                for source in sources_list:
-                    st.write(source)
+        chain = RetrievalQAWithSourcesChain.from_llm(
+            llm=llm,
+            retriever=vectorstore.as_retriever()
+        )
+
+        st.write("Processing your query...")
+        result = chain({"question": query}, return_only_outputs=True)
+
+        st.subheader("Answer")
+        st.write(result["answer"])
+
+        if result.get("sources"):
+            st.subheader("Sources")
+            sources = result["sources"].split("\n")
+            for source in sources:
+                st.write(source)
