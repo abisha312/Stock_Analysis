@@ -1,5 +1,5 @@
 streamlit
-langchain
+langchain==0.0.312
 openai
 faiss-cpu
 python-dotenv
