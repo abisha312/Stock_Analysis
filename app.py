@@ -4,17 +4,13 @@ import pickle
 import time
 from dotenv import load_dotenv
 
-# ✅ Updated imports for langchain==0.0.312
+# ✅ Correct imports for langchain==0.0.312 + new packages
 from langchain.chains import RetrievalQAWithSourcesChain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.document_loaders import UnstructuredURLLoader
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import FAISS
+from langchain_openai import OpenAIEmbeddings
 from langchain_community.chat_models import ChatOpenAI
 from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import UnstructuredURLLoader
-from langchain_openai import OpenAIEmbeddings
-
 
 # Load environment variables
 load_dotenv()
@@ -31,7 +27,7 @@ process_url_clicked = st.sidebar.button("Process URLs")
 file_path = "faiss_store_openai.pkl"
 
 main_placeholder = st.empty()
-llm = ChatOpenAI(temperature=0.9, model_name="gpt-3.5-turbo", max_tokens=500)
+llm = ChatOpenAI(temperature=0.9, model="gpt-3.5-turbo", max_tokens=500)
 
 if process_url_clicked:
     loader = UnstructuredURLLoader(urls=urls)
