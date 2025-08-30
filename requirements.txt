@@ -7,3 +7,4 @@ unstructured
 transformers
 torch
 rich
+langchain-huggingface
