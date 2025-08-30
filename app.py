@@ -78,7 +78,7 @@ if query:
 
         llm = Cohere(
             cohere_api_key=COHERE_API_KEY,
-            model="xlarge",  # model that supports Generate API
+            model="command-xlarge-nightly",  # model that supports Generate API
             temperature=0,
             max_tokens=500
         )
