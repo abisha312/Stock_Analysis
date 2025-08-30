@@ -39,7 +39,7 @@ def get_vectorstore(docs):
         vectorstore.save_local(file_path)
     return vectorstore
 
-# ----------------- Process URLs -----------------
+# ----------------- Process URLs (Small Model for Summarization) -----------------
 if process_url_clicked:
     if not urls:
         st.sidebar.error("Please enter at least one URL.")
@@ -51,16 +51,16 @@ if process_url_clicked:
         st.sidebar.info("Splitting text...")
         text_splitter = RecursiveCharacterTextSplitter(
             separators=["\n\n", "\n", ".", ","],
-            chunk_size=1500,       # ~375 tokens
-            chunk_overlap=150
+            chunk_size=2000,       # safe for small model (~500 tokens)
+            chunk_overlap=200
         )
         docs = text_splitter.split_documents(data)
 
-        st.sidebar.info("Summarizing chunks to fit token limit...")
+        st.sidebar.info("Summarizing chunks using FLAN-T5-Small...")
         pipe_summarizer = pipeline(
             "text2text-generation",
-            model="google/flan-t5-large",
-            max_new_tokens=256,
+            model="google/flan-t5-small",
+            max_new_tokens=150,
             device="cpu"
         )
         summarizer = HuggingFacePipeline(pipeline=pipe_summarizer)
@@ -68,8 +68,8 @@ if process_url_clicked:
         summarized_docs = []
         for doc in docs:
             content = doc.page_content
-            if len(content) > 1500:  # enforce ~375 token limit
-                content = content[:1500]
+            if len(content) > 2000:  # enforce safe length
+                content = content[:2000]
             summary = summarizer(content)
             doc.page_content = summary
             summarized_docs.append(doc)
@@ -77,7 +77,7 @@ if process_url_clicked:
         vectorstore = get_vectorstore(summarized_docs)
         st.sidebar.success("Processing completed!")
 
-# ----------------- User Query -----------------
+# ----------------- User Query (Large Model for QA) -----------------
 query = st.text_input("Ask a question about the articles:")
 
 if query:
@@ -90,6 +90,7 @@ if query:
         )
         vectorstore = FAISS.load_local(file_path, embeddings, allow_dangerous_deserialization=True)
 
+        st.sidebar.info("Using FLAN-T5-Large to answer your question...")
         pipe = pipeline(
             "text2text-generation",
             model="google/flan-t5-large",
