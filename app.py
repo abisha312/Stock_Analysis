@@ -2,13 +2,15 @@ import streamlit as st
 from langchain.chains import RetrievalQAWithSourcesChain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import UnstructuredURLLoader
-from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
 from langchain.chat_models import ChatOpenAI
+from langchain.embeddings.base import Embeddings
+import cohere
 import os
 
-# ✅ Load API key from Streamlit secrets (safe for Streamlit Cloud)
-os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
+# ✅ Load Cohere API key from Streamlit secrets
+COHERE_API_KEY = st.secrets["COHERE_API_KEY"]
+co = cohere.Client(COHERE_API_KEY)
 
 st.set_page_config(page_title="News Research Tool", layout="wide")
 st.title("📰 News Research Tool")
@@ -25,13 +27,22 @@ process_url_clicked = st.sidebar.button("Process URLs")
 
 file_path = "faiss_index"
 
+# ✅ Custom Cohere Embeddings for LangChain
+class CohereEmbeddings(Embeddings):
+    def embed_documents(self, texts):
+        response = co.embed(model="large", texts=texts)
+        return response.embeddings
+
+    def embed_query(self, text):
+        response = co.embed(model="large", texts=[text])
+        return response.embeddings[0]
+
 # Process URLs
 if process_url_clicked:
     if not urls:
         st.sidebar.error("Please enter at least one URL.")
     else:
         st.sidebar.write("Loading articles...")
-
         loader = UnstructuredURLLoader(urls=urls)
         data = loader.load()
 
@@ -44,7 +55,7 @@ if process_url_clicked:
         docs = text_splitter.split_documents(data)
 
         st.sidebar.write("Creating embeddings...")
-        embeddings = OpenAIEmbeddings()
+        embeddings = CohereEmbeddings()
         vectorstore = FAISS.from_documents(docs, embeddings)
 
         # Save locally
@@ -59,7 +70,7 @@ if query:
     if not os.path.exists(file_path):
         st.error("No knowledge base found. Please process URLs first.")
     else:
-        embeddings = OpenAIEmbeddings()
+        embeddings = CohereEmbeddings()
         vectorstore = FAISS.load_local(
             file_path, embeddings, allow_dangerous_deserialization=True
         )
@@ -67,7 +78,7 @@ if query:
         llm = ChatOpenAI(
             model_name="gpt-3.5-turbo",
             temperature=0,
-            max_tokens=500  # ✅ fixed param name
+            max_tokens=500
         )
 
         chain = RetrievalQAWithSourcesChain.from_llm(
