@@ -3,17 +3,17 @@ import os
 from langchain_community.document_loaders import UnstructuredURLLoader
 from langchain_community.embeddings import HuggingFaceInstructEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain_community.chat_models import HuggingFacePipeline
 from langchain.chains import RetrievalQAWithSourcesChain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from transformers import pipeline
+from langchain_community.llms import HuggingFacePipeline
 
+# ----------------- Streamlit Page Config -----------------
 st.set_page_config(page_title="News Research Tool", layout="wide")
-st.title("📰 News Research Tool (Hugging Face LLM + Embeddings)")
-
+st.title("📰 News Research Tool")
 st.sidebar.header("Configuration")
 
-# URLs input
+# ----------------- Sidebar Inputs -----------------
 urls = []
 for i in range(3):
     url = st.sidebar.text_input(f"News URL {i+1}")
@@ -22,10 +22,10 @@ for i in range(3):
 
 process_url_clicked = st.sidebar.button("Process URLs")
 
-# FAISS index path
+# FAISS index file path
 file_path = "faiss_index"
 
-# Function to create/load vectorstore
+# ----------------- Vectorstore Loader/Creator -----------------
 def get_vectorstore(docs):
     embeddings = HuggingFaceInstructEmbeddings(
         model_name="hkunlp/instructor-large",
@@ -35,12 +35,12 @@ def get_vectorstore(docs):
         st.sidebar.info("Loading existing knowledge base...")
         vectorstore = FAISS.load_local(file_path, embeddings, allow_dangerous_deserialization=True)
     else:
-        st.sidebar.info("Creating knowledge base...")
+        st.sidebar.info("Creating FAISS index (first-time run)...")
         vectorstore = FAISS.from_documents(docs, embeddings)
         vectorstore.save_local(file_path)
     return vectorstore
 
-# Process URLs
+# ----------------- Process URLs -----------------
 if process_url_clicked:
     if not urls:
         st.sidebar.error("Please enter at least one URL.")
@@ -59,31 +59,32 @@ if process_url_clicked:
 
         # Create/load FAISS vectorstore
         vectorstore = get_vectorstore(docs)
-        st.sidebar.success("✅ Knowledge base ready!")
+        st.sidebar.success("Processing completed!")
 
-# Query input
+# ----------------- User Query -----------------
 query = st.text_input("Ask a question about the articles:")
 
 if query:
     if not os.path.exists(file_path):
         st.error("No knowledge base found. Please process URLs first.")
     else:
+        # Load embeddings & vectorstore
         embeddings = HuggingFaceInstructEmbeddings(
             model_name="hkunlp/instructor-large",
             model_kwargs={"device": "cpu"}
         )
         vectorstore = FAISS.load_local(file_path, embeddings, allow_dangerous_deserialization=True)
 
-        # Use a Hugging Face local LLM
-        st.sidebar.info("Loading Hugging Face LLM pipeline (this may take a while)...")
-        llm_pipeline = pipeline(
+        # Setup Hugging Face text-generation pipeline
+        pipe = pipeline(
             "text-generation",
-            model="meta-llama/Llama-2-7b-chat-hf",
-            device_map="auto",
-            torch_dtype="auto"
+            model="tiiuae/falcon-7b-instruct",
+            max_new_tokens=512,
+            temperature=0
         )
-        llm = HuggingFacePipeline(pipeline=llm_pipeline)
+        llm = HuggingFacePipeline(pipeline=pipe)
 
+        # Build retrieval chain
         chain = RetrievalQAWithSourcesChain.from_llm(
             llm=llm,
             retriever=vectorstore.as_retriever()
