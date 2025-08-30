@@ -51,12 +51,11 @@ if process_url_clicked:
         st.sidebar.info("Splitting text...")
         text_splitter = RecursiveCharacterTextSplitter(
             separators=["\n\n", "\n", ".", ","],
-            chunk_size=500,       # smaller chunks to fit FLAN-T5 limit
+            chunk_size=500,
             chunk_overlap=50
         )
         docs = text_splitter.split_documents(data)
 
-        # ----------------- Summarize each chunk -----------------
         st.sidebar.info("Summarizing chunks to fit token limit...")
         pipe_summarizer = pipeline(
             "text2text-generation",
@@ -67,11 +66,10 @@ if process_url_clicked:
 
         summarized_docs = []
         for doc in docs:
-            # Ensure input length within model limits
             content = doc.page_content
-            if len(content) > 1000:  # simple char-based truncation
+            if len(content) > 1000:  # truncate long chunks
                 content = content[:1000]
-            summary = summarizer(content)  # call directly, no .run()
+            summary = summarizer(content)
             doc.page_content = summary
             summarized_docs.append(doc)
 
@@ -91,7 +89,6 @@ if query:
         )
         vectorstore = FAISS.load_local(file_path, embeddings, allow_dangerous_deserialization=True)
 
-        # Use free FLAN-T5 model for CPU-friendly text generation
         pipe = pipeline(
             "text2text-generation",
             model="google/flan-t5-small",
@@ -99,14 +96,12 @@ if query:
         )
         llm = HuggingFacePipeline(pipeline=pipe)
 
-        # Build retrieval chain
-        chain = RetrievalQAWithSourcesChain.from_llm(
-            llm=llm,
-            retriever=vectorstore.as_retriever()
-        )
+        # Limit retrieved chunks to top 3 to prevent token overflow
+        retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 3})
+        chain = RetrievalQAWithSourcesChain.from_llm(llm=llm, retriever=retriever)
 
         st.info("Processing your query...")
-        result = chain({"question": query}, return_only_outputs=True)
+        result = chain.invoke({"question": query}, return_only_outputs=True)  # use invoke()
 
         st.subheader("Answer")
         st.write(result["answer"])
