@@ -3,7 +3,7 @@ from langchain.chains import RetrievalQAWithSourcesChain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import UnstructuredURLLoader
 from langchain.vectorstores import FAISS
-from langchain.llms import Cohere
+from langchain.chat_models import CohereChat
 from langchain.embeddings.base import Embeddings
 import cohere
 import os
@@ -65,32 +65,26 @@ if process_url_clicked:
 
 # User Query
 query = st.text_input("Ask a question about the articles:")
-
 if query:
     if not os.path.exists(file_path):
         st.error("No knowledge base found. Please process URLs first.")
     else:
         embeddings = CohereEmbeddings()
         vectorstore = FAISS.load_local(file_path, embeddings)
-
-        llm = Cohere(
+        llm = CohereChat(
+            model="command-nightly",  # or "command"
             cohere_api_key=COHERE_API_KEY,
-            model="command-nightly",  # or "command" depending on your plan
             temperature=0,
             max_tokens=500
         )
-
         chain = RetrievalQAWithSourcesChain.from_llm(
             llm=llm,
             retriever=vectorstore.as_retriever()
         )
-
         st.write("Processing your query...")
         result = chain({"question": query}, return_only_outputs=True)
-
         st.subheader("Answer")
         st.write(result["answer"])
-
         if result.get("sources"):
             st.subheader("Sources")
             sources = result["sources"].split("\n")
