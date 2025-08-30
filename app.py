@@ -73,9 +73,9 @@ if query:
         embeddings = CohereEmbeddings()
         vectorstore = FAISS.load_local(file_path, embeddings)
 
-        llm = CohereChat(
+        llm = Cohere(
             cohere_api_key=COHERE_API_KEY,
-            model="command-nightly",
+            model="command-nightly",  # or "command" depending on your plan
             temperature=0,
             max_tokens=500
         )
