@@ -71,9 +71,7 @@ if query:
         st.error("No knowledge base found. Please process URLs first.")
     else:
         embeddings = CohereEmbeddings()
-        vectorstore = FAISS.load_local(
-            file_path, embeddings, allow_dangerous_deserialization=True
-        )
+        vectorstore = FAISS.load_local(file_path, embeddings)
 
         llm = ChatOpenAI(
             model_name="gpt-3.5-turbo",
