@@ -1,10 +1,10 @@
 import streamlit as st
+from langchain_community.document_loaders import UnstructuredURLLoader
+from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings import HuggingFaceInstructEmbeddings
+from langchain_community.chat_models import ChatOpenAI
 from langchain.chains import RetrievalQAWithSourcesChain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.document_loaders import UnstructuredURLLoader
-from langchain.vectorstores import FAISS
-from langchain.embeddings import HuggingFaceInstructEmbeddings
-from langchain.chat_models import ChatOpenAI
 import os
 
 # ------------------------------
@@ -91,7 +91,7 @@ if query:
             model_name="hkunlp/instructor-large",
             model_kwargs={"device": "cpu"}
         )
-        vectorstore = FAISS.load_local(file_path, embeddings)
+        vectorstore = FAISS.load_local(file_path, embeddings, allow_dangerous_deserialization=True)
 
         llm = ChatOpenAI(
             model_name="gpt-3.5-turbo",
