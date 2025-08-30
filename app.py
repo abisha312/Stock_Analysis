@@ -3,7 +3,7 @@ from langchain.chains import RetrievalQAWithSourcesChain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import UnstructuredURLLoader
 from langchain_community.vectorstores import FAISS
-from langchain_community.llms import Cohere  # updated import
+from langchain.chat_models import CohereChat  # updated import
 from langchain.embeddings.base import Embeddings
 import cohere
 import os
@@ -76,11 +76,11 @@ if query:
             file_path, embeddings, allow_dangerous_deserialization=True
         )
 
-        llm = Cohere(
+        llm = CohereChat(
             cohere_api_key=COHERE_API_KEY,
-            model="command-xlarge-nightly",  # model that supports Generate API
+            model="command-xlarge-nightly",
             temperature=0,
-            max_tokens=500
+            max_output_tokens=500
         )
 
         chain = RetrievalQAWithSourcesChain.from_llm(
