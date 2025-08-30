@@ -51,8 +51,8 @@ if process_url_clicked:
         st.sidebar.info("Splitting text...")
         text_splitter = RecursiveCharacterTextSplitter(
             separators=["\n\n", "\n", ".", ","],
-            chunk_size=500,       # smaller chunks
-            chunk_overlap=50      # less overlap
+            chunk_size=1000,       # larger chunks for faster processing
+            chunk_overlap=100
         )
         docs = text_splitter.split_documents(data)
 
@@ -66,19 +66,17 @@ if query:
     if not os.path.exists(file_path):
         st.error("No knowledge base found. Please process URLs first.")
     else:
-        # Load embeddings & vectorstore
         embeddings = HuggingFaceEmbeddings(
             model_name="hkunlp/instructor-large",
             model_kwargs={"device": "cpu"}
         )
         vectorstore = FAISS.load_local(file_path, embeddings, allow_dangerous_deserialization=True)
 
-        # Use free BLOOM model for text generation (CPU-friendly)
+        # Use free FLAN-T5 model for CPU-friendly text generation
         pipe = pipeline(
-            "text-generation",
-            model="bigscience/bloom-560m",
-            max_new_tokens=256,
-            temperature=0.7
+            "text2text-generation",
+            model="google/flan-t5-small",
+            max_new_tokens=256
         )
         llm = HuggingFacePipeline(pipeline=pipe)
 
