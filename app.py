@@ -7,6 +7,8 @@ from langchain.vectorstores import FAISS
 from langchain.chat_models import ChatOpenAI
 import os
 
+st.set_page_config(page_title="News Research Tool", layout="wide")
+
 # Load API key from Streamlit secrets
 os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
 
