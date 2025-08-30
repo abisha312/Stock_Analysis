@@ -10,6 +10,24 @@ import os
 # Load API key from Streamlit secrets
 os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
 
+# Load API key from Streamlit secrets
+os.environ["OPENAI_API_KEY"] = st.secrets.get("OPENAI_API_KEY", "")
+
+# Debug: check if key is loaded
+api_key = os.environ.get("OPENAI_API_KEY")
+if not api_key:
+    st.sidebar.error("❌ OpenAI API key not found. Please check Streamlit secrets.")
+else:
+    st.sidebar.success("✅ OpenAI API key loaded successfully.")
+    st.sidebar.write("API Key preview:", api_key[:4] + "...")  # safe preview
+
+# Only create embeddings if key is present
+if api_key:
+    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+else:
+    st.stop()  # Stop the app if no key
+
+
 st.set_page_config(page_title="News Research Tool", layout="wide")
 st.title("📰 News Research Tool")
 st.sidebar.header("Configuration")
