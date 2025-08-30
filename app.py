@@ -2,8 +2,8 @@ import streamlit as st
 from langchain.chains import RetrievalQAWithSourcesChain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import UnstructuredURLLoader
-from langchain.vectorstores import FAISS
-from langchain.llms import Cohere  # use old Cohere class
+from langchain_community.vectorstores import FAISS
+from langchain_community.llms import Cohere  # updated import
 from langchain.embeddings.base import Embeddings
 import cohere
 import os
@@ -71,7 +71,10 @@ if query:
         st.error("No knowledge base found. Please process URLs first.")
     else:
         embeddings = CohereEmbeddings()
-        vectorstore = FAISS.load_local(file_path, embeddings)
+        # Allow deserialization of your trusted FAISS index
+        vectorstore = FAISS.load_local(
+            file_path, embeddings, allow_dangerous_deserialization=True
+        )
 
         llm = Cohere(
             cohere_api_key=COHERE_API_KEY,
