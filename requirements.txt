@@ -1,8 +1,8 @@
-langchain==0.2.17
-langchain-cohere==0.2.0
-cohere==5.7.0
 streamlit==1.35.0
 pillow>=10.0.0
+langchain==0.0.312
+cohere==5.8.0
+faiss-cpu==1.12.0
 python-dotenv==1.1.1
 pandas==2.3.1
 unstructured
