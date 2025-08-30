@@ -51,12 +51,11 @@ if process_url_clicked:
         st.sidebar.info("Splitting text...")
         text_splitter = RecursiveCharacterTextSplitter(
             separators=["\n\n", "\n", ".", ","],
-            chunk_size=1000,
-            chunk_overlap=100
+            chunk_size=500,       # smaller chunks
+            chunk_overlap=50      # less overlap
         )
         docs = text_splitter.split_documents(data)
 
-        # Create/load FAISS vectorstore
         vectorstore = get_vectorstore(docs)
         st.sidebar.success("Processing completed!")
 
