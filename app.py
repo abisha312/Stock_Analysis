@@ -51,15 +51,15 @@ if process_url_clicked:
         st.sidebar.info("Splitting text...")
         text_splitter = RecursiveCharacterTextSplitter(
             separators=["\n\n", "\n", ".", ","],
-            chunk_size=2000,       # ~500 tokens safe
-            chunk_overlap=200
+            chunk_size=1500,       # ~375 tokens
+            chunk_overlap=150
         )
         docs = text_splitter.split_documents(data)
 
         st.sidebar.info("Summarizing chunks to fit token limit...")
         pipe_summarizer = pipeline(
             "text2text-generation",
-            model="google/flan-t5-large",  # switched to large
+            model="google/flan-t5-large",
             max_new_tokens=256,
             device="cpu"
         )
@@ -68,8 +68,8 @@ if process_url_clicked:
         summarized_docs = []
         for doc in docs:
             content = doc.page_content
-            if len(content) > 2000:  # enforce ~500 token limit
-                content = content[:2000]
+            if len(content) > 1500:  # enforce ~375 token limit
+                content = content[:1500]
             summary = summarizer(content)
             doc.page_content = summary
             summarized_docs.append(doc)
@@ -92,7 +92,7 @@ if query:
 
         pipe = pipeline(
             "text2text-generation",
-            model="google/flan-t5-large",  # switched to large
+            model="google/flan-t5-large",
             max_new_tokens=512,
             device="cpu"
         )
