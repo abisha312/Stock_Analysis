@@ -1,8 +1,8 @@
 streamlit
 langchain
+langchain-community
 sentence-transformers
 faiss-cpu
 unstructured
 transformers
 torch
-
