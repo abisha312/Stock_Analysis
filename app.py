@@ -3,7 +3,7 @@ from langchain.chains import RetrievalQAWithSourcesChain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import UnstructuredURLLoader
 from langchain.vectorstores import FAISS
-from langchain.chat_models import CohereChat
+from langchain.llms import Cohere
 from langchain.embeddings.base import Embeddings
 import cohere
 import os
