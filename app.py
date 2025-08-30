@@ -1,4 +1,3 @@
-last hugging
 import streamlit as st
 import os
 from langchain_huggingface import HuggingFaceEmbeddings
