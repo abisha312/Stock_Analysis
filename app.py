@@ -1,9 +1,9 @@
 import streamlit as st
 from langchain.chains import RetrievalQAWithSourcesChain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import UnstructuredURLLoader  # updated import
+from langchain_community.document_loaders import UnstructuredURLLoader
 from langchain.vectorstores import FAISS
-from langchain.chat_models import CohereChat  # use chat_models for new Cohere API
+from langchain.llms import Cohere  # use old Cohere class
 from langchain.embeddings.base import Embeddings
 import cohere
 import os
@@ -73,9 +73,9 @@ if query:
         embeddings = CohereEmbeddings()
         vectorstore = FAISS.load_local(file_path, embeddings)
 
-        llm = CohereChat(
-            model="command-nightly",  # or "command" depending on your plan
+        llm = Cohere(
             cohere_api_key=COHERE_API_KEY,
+            model="xlarge",  # model that supports Generate API
             temperature=0,
             max_tokens=500
         )
