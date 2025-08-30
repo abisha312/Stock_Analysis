@@ -1,5 +1,3 @@
-import streamlit as st
-import os
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQAWithSourcesChain
@@ -7,18 +5,19 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import UnstructuredURLLoader
 from langchain_community.llms import HuggingFacePipeline
 from transformers import pipeline
+import streamlit as st
+import os
 
 # ----------------- Streamlit Page Config -----------------
 st.set_page_config(page_title="News Research Tool", layout="wide")
 st.title("📰 News Research Tool")
 
-# ----------------- Sidebar Inputs -----------------
+# ----------------- Sidebar URL Input -----------------
 urls = []
 for i in range(3):
     url = st.sidebar.text_input(f"News URL {i+1}")
     if url:
         urls.append(url)
-
 process_url_clicked = st.sidebar.button("Process URLs")
 
 # FAISS index file path
@@ -27,7 +26,7 @@ file_path = "faiss_index"
 # ----------------- Vectorstore Loader/Creator -----------------
 def get_vectorstore(docs):
     embeddings = HuggingFaceEmbeddings(
-        model_name="hkunlp/instructor-large",
+        model_name="sentence-transformers/all-MiniLM-L6-v2",  # smaller, CPU-friendly
         model_kwargs={"device": "cpu"}
     )
     if os.path.exists(file_path):
@@ -48,14 +47,15 @@ if process_url_clicked:
         loader = UnstructuredURLLoader(urls=urls)
         data = loader.load()
 
-        st.sidebar.info("Splitting text...")
+        st.sidebar.info("Splitting text into larger chunks...")
         text_splitter = RecursiveCharacterTextSplitter(
             separators=["\n\n", "\n", ".", ","],
-            chunk_size=500,       # smaller chunks
-            chunk_overlap=50      # less overlap
+            chunk_size=2000,      # larger chunk → fewer embeddings
+            chunk_overlap=200
         )
         docs = text_splitter.split_documents(data)
 
+        # Create/load FAISS vectorstore
         vectorstore = get_vectorstore(docs)
         st.sidebar.success("Processing completed!")
 
@@ -66,23 +66,22 @@ if query:
     if not os.path.exists(file_path):
         st.error("No knowledge base found. Please process URLs first.")
     else:
-        # Load embeddings & vectorstore
         embeddings = HuggingFaceEmbeddings(
-            model_name="hkunlp/instructor-large",
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
             model_kwargs={"device": "cpu"}
         )
         vectorstore = FAISS.load_local(file_path, embeddings, allow_dangerous_deserialization=True)
 
-        # Use free BLOOM model for text generation (CPU-friendly)
+        # ----------------- LLM Setup -----------------
         pipe = pipeline(
             "text-generation",
-            model="bigscience/bloom-560m",
-            max_new_tokens=256,
-            temperature=0.7
+            model="bigscience/bloom-560m",   # CPU-friendly
+            max_new_tokens=256,              # limit output length
+            temperature=0
         )
         llm = HuggingFacePipeline(pipeline=pipe)
 
-        # Build retrieval chain
+        # ----------------- Retrieval + QA Chain -----------------
         chain = RetrievalQAWithSourcesChain.from_llm(
             llm=llm,
             retriever=vectorstore.as_retriever()
@@ -91,8 +90,12 @@ if query:
         st.info("Processing your query...")
         result = chain({"question": query}, return_only_outputs=True)
 
-        st.subheader("Answer")
-        st.write(result["answer"])
+        # ----------------- Limit summary to ~500 words -----------------
+        answer_words = result["answer"].split()
+        summary = " ".join(answer_words[:500])  # first 500 words max
+
+        st.subheader("Answer (max 500 words)")
+        st.write(summary)
 
         if result.get("sources"):
             st.subheader("Sources")
