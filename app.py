@@ -51,8 +51,8 @@ if process_url_clicked:
         st.sidebar.info("Splitting text...")
         text_splitter = RecursiveCharacterTextSplitter(
             separators=["\n\n", "\n", ".", ","],
-            chunk_size=500,
-            chunk_overlap=50
+            chunk_size=2000,       # ~500 tokens
+            chunk_overlap=200      # some overlap
         )
         docs = text_splitter.split_documents(data)
 
@@ -60,15 +60,16 @@ if process_url_clicked:
         pipe_summarizer = pipeline(
             "text2text-generation",
             model="google/flan-t5-small",
-            max_new_tokens=150
+            max_new_tokens=150,
+            device="cpu"
         )
         summarizer = HuggingFacePipeline(pipeline=pipe_summarizer)
 
         summarized_docs = []
         for doc in docs:
             content = doc.page_content
-            if len(content) > 1000:  # truncate long chunks
-                content = content[:1000]
+            if len(content) > 2000:  # enforce max ~500 tokens
+                content = content[:2000]
             summary = summarizer(content)
             doc.page_content = summary
             summarized_docs.append(doc)
@@ -92,16 +93,17 @@ if query:
         pipe = pipeline(
             "text2text-generation",
             model="google/flan-t5-small",
-            max_new_tokens=256
+            max_new_tokens=256,
+            device="cpu"
         )
         llm = HuggingFacePipeline(pipeline=pipe)
 
-        # Limit retrieved chunks to top 3 to prevent token overflow
-        retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 3})
+        # Limit retrieved chunks to top 2 to keep total tokens <= 500
+        retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 2})
         chain = RetrievalQAWithSourcesChain.from_llm(llm=llm, retriever=retriever)
 
         st.info("Processing your query...")
-        result = chain.invoke({"question": query}, return_only_outputs=True)  # use invoke()
+        result = chain.invoke({"question": query}, return_only_outputs=True)
 
         st.subheader("Answer")
         st.write(result["answer"])
