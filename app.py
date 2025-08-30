@@ -51,12 +51,27 @@ if process_url_clicked:
         st.sidebar.info("Splitting text...")
         text_splitter = RecursiveCharacterTextSplitter(
             separators=["\n\n", "\n", ".", ","],
-            chunk_size=1000,       # larger chunks for faster processing
-            chunk_overlap=100
+            chunk_size=500,       # smaller chunks to fit FLAN-T5 limit
+            chunk_overlap=50
         )
         docs = text_splitter.split_documents(data)
 
-        vectorstore = get_vectorstore(docs)
+        # ----------------- Summarize each chunk -----------------
+        st.sidebar.info("Summarizing chunks to fit token limit...")
+        pipe_summarizer = pipeline(
+            "text2text-generation",
+            model="google/flan-t5-small",
+            max_new_tokens=150
+        )
+        summarizer = HuggingFacePipeline(pipeline=pipe_summarizer)
+
+        summarized_docs = []
+        for doc in docs:
+            summary = summarizer.run(doc.page_content)
+            doc.page_content = summary
+            summarized_docs.append(doc)
+
+        vectorstore = get_vectorstore(summarized_docs)
         st.sidebar.success("Processing completed!")
 
 # ----------------- User Query -----------------
