@@ -3,7 +3,7 @@ from langchain.chains import RetrievalQAWithSourcesChain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import UnstructuredURLLoader
 from langchain.vectorstores import FAISS
-from langchain.chat_models import ChatOpenAI
+from langchain.chat_models import CohereChat
 from langchain.embeddings.base import Embeddings
 import cohere
 import os
@@ -73,8 +73,9 @@ if query:
         embeddings = CohereEmbeddings()
         vectorstore = FAISS.load_local(file_path, embeddings)
 
-        llm = ChatOpenAI(
-            model_name="gpt-3.5-turbo",
+        llm = CohereChat(
+            cohere_api_key=COHERE_API_KEY,
+            model="command-nightly",
             temperature=0,
             max_tokens=500
         )
