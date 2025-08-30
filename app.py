@@ -67,7 +67,7 @@ if process_url_clicked:
 
         summarized_docs = []
         for doc in docs:
-            summary = summarizer.run(doc.page_content)
+            summary = summarizer(doc.page_content)  # call directly, no .run()
             doc.page_content = summary
             summarized_docs.append(doc)
 
