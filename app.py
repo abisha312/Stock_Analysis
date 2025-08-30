@@ -67,7 +67,11 @@ if process_url_clicked:
 
         summarized_docs = []
         for doc in docs:
-            summary = summarizer(doc.page_content)  # call directly, no .run()
+            # Ensure input length within model limits
+            content = doc.page_content
+            if len(content) > 1000:  # simple char-based truncation
+                content = content[:1000]
+            summary = summarizer(content)  # call directly, no .run()
             doc.page_content = summary
             summarized_docs.append(doc)
 
