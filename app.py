@@ -119,8 +119,19 @@ if process_url_clicked:
     else:
         st.sidebar.info("Loading articles...")
         loader = UnstructuredURLLoader(urls=urls)
-        data = loader.load()
+        
+        # Add a custom user-agent to the requests to avoid being blocked by some sites.
+        # This is a common practice to mimic a web browser.
+        try:
+            loader.requests_kwargs = {'headers': {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}}
+            data = loader.load()
+        except Exception as e:
+            st.error(f"Failed to load URLs. The website might be blocking the request. Error: {e}")
+            data = []
 
+        if not data:
+            st.stop()
+        
         st.sidebar.info("Splitting text into chunks...")
         text_splitter = RecursiveCharacterTextSplitter(
             separators=["\n\n", "\n", ".", ","],
