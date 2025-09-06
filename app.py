@@ -144,14 +144,19 @@ if process_url_clicked:
         st.sidebar.info("Summarizing chunks using Gemini API...")
         summarized_docs = []
         progress_bar = st.sidebar.progress(0)
-        
-        # Sequentially process each document
-        for i, doc in enumerate(docs):
+
+        def summarize_doc(doc):
             prompt = f"Summarize the following article text concisely: {doc.page_content}"
             summary = get_llm_response(prompt)
-            doc.page_content = summary
-            summarized_docs.append(doc)
-            progress_bar.progress((i + 1) / len(docs))
+            return Document(page_content=summary, metadata=doc.metadata)
+
+        # Use ThreadPoolExecutor with a limited number of workers
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future_to_doc = {executor.submit(summarize_doc, doc): doc for doc in docs}
+            for i, future in enumerate(future_to_doc):
+                summary_doc = future.result()
+                summarized_docs.append(summary_doc)
+                progress_bar.progress((i + 1) / len(docs))
             
         st.sidebar.info("Creating vectorstore from summarized documents...")
         vectorstore = get_vectorstore(summarized_docs)
