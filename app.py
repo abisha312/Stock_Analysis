@@ -3,13 +3,11 @@ import os
 import requests
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import UnstructuredURLLoader
-from langchain_community.llms import HuggingFacePipeline
-from transformers import pipeline
 from bs4 import BeautifulSoup
 from langchain.docstore.document import Document
 
@@ -160,12 +158,15 @@ if process_url_clicked:
         summarized_docs = []
         progress_bar = st.sidebar.progress(0)
         
-        for i, doc in enumerate(docs):
-            summary = generate_summary_with_gemini(doc.page_content)
-            doc.page_content = summary
-            summarized_docs.append(doc)
-            progress_bar.progress((i + 1) / len(docs))
-            time.sleep(0.5) # small delay to prevent API rate limiting
+        # Use ThreadPoolExecutor to run summarization tasks in parallel
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [executor.submit(generate_summary_with_gemini, doc.page_content) for doc in docs]
+            for i, future in enumerate(futures):
+                summary = future.result()
+                doc = docs[i]
+                doc.page_content = summary
+                summarized_docs.append(doc)
+                progress_bar.progress((i + 1) / len(docs))
         
         st.sidebar.info("Creating vectorstore from summarized documents...")
         vectorstore = get_vectorstore(summarized_docs)
