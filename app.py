@@ -8,6 +8,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.docstore.document import Document
+from concurrent.futures import ThreadPoolExecutor
 
 # ----------------- Streamlit Page Config -----------------
 st.set_page_config(page_title="News Research Tool", layout="wide")
@@ -144,14 +145,14 @@ if process_url_clicked:
         summarized_docs = []
         progress_bar = st.sidebar.progress(0)
         
-        # Sequentially process each document with an intelligent delay
+        # Sequentially process each document
         for i, doc in enumerate(docs):
             prompt = f"Summarize the following article text concisely: {doc.page_content}"
             summary = get_llm_response(prompt)
             doc.page_content = summary
             summarized_docs.append(doc)
             progress_bar.progress((i + 1) / len(docs))
-        
+            
         st.sidebar.info("Creating vectorstore from summarized documents...")
         vectorstore = get_vectorstore(summarized_docs)
         st.sidebar.success("Processing completed! Your knowledge base is ready.")
