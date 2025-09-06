@@ -3,7 +3,6 @@ import os
 import requests
 import json
 import time
-from concurrent.futures import ThreadPoolExecutor
 from bs4 import BeautifulSoup
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
@@ -34,16 +33,16 @@ process_url_clicked = st.sidebar.button("Process URLs")
 file_path = "faiss_index"
 
 # ----------------- LLM API Calls -----------------
-def generate_summary_with_gemini(text, max_retries=5, base_delay=5):
+def get_llm_response(prompt):
     """
-    Generates a summary of the provided text using the Gemini API with exponential backoff.
+    Makes a single call to the Gemini API with a given prompt.
     """
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key={API_KEY}"
     
     payload = {
         "contents": [{
             "parts": [
-                {"text": f"Summarize the following article text concisely: {text}"}
+                {"text": prompt}
             ]
         }]
     }
@@ -52,85 +51,31 @@ def generate_summary_with_gemini(text, max_retries=5, base_delay=5):
         'Content-Type': 'application/json'
     }
 
-    retries = 0
-    while retries < max_retries:
-        try:
-            response = requests.post(url, headers=headers, data=json.dumps(payload))
-            response.raise_for_status()
-            
-            result = response.json()
-            summary = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'No summary available.')
-            return summary
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 429:
-                st.warning(f"Rate limit hit. Retrying in {base_delay} seconds...")
-                time.sleep(base_delay)
-                retries += 1
-                base_delay *= 2  # Exponential backoff
-            else:
-                st.error(f"Error calling Gemini API: {e}")
-                return "Failed to get summary due to an API error."
-        except requests.exceptions.RequestException as e:
+    try:
+        response = requests.post(url, headers=headers, data=json.dumps(payload))
+        response.raise_for_status()
+        
+        result = response.json()
+        text = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'No response available.')
+        return text
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 429:
+            st.error("Rate limit exceeded. Please wait and try again.")
+        else:
             st.error(f"Error calling Gemini API: {e}")
-            return "Failed to get summary due to an API error."
-    
-    st.error("Maximum retries reached for summarization. Please try again later.")
-    return "Failed to get summary after multiple retries."
-
-
-def answer_query_with_gemini(question, context, max_retries=5, base_delay=5):
-    """
-    Answers a question based on the provided context using the Gemini API with exponential backoff.
-    """
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key={API_KEY}"
-    
-    payload = {
-        "contents": [{
-            "parts": [
-                {"text": f"Answer the following question based on the provided articles. If the information is not in the articles, say so. Question: {question}. Articles: {context}"}
-            ]
-        }]
-    }
-
-    headers = {
-        'Content-Type': 'application/json'
-    }
-    
-    retries = 0
-    while retries < max_retries:
-        try:
-            response = requests.post(url, headers=headers, data=json.dumps(payload))
-            response.raise_for_status()
-            
-            result = response.json()
-            answer = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'No answer available.')
-            return answer
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 429:
-                st.warning(f"Rate limit hit. Retrying in {base_delay} seconds...")
-                time.sleep(base_delay)
-                retries += 1
-                base_delay *= 2  # Exponential backoff
-            else:
-                st.error(f"Error calling Gemini API: {e}")
-                return "Failed to get an answer due to an API error."
-        except requests.exceptions.RequestException as e:
-            st.error(f"Error calling Gemini API: {e}")
-            return "Failed to get an answer due to an API error."
-
-    st.error("Maximum retries reached for answering query. Please try again later.")
-    return "Failed to get an answer after multiple retries."
+        return "Failed to get a response due to an API error."
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error calling Gemini API: {e}")
+        return "Failed to get a response due to an API error."
 
 # ----------------- Custom URL Loader -----------------
 def load_and_parse_urls(urls):
     """
-    Manually loads and parses content from URLs with a more robust approach.
+    Manually loads and parses content from URLs with a simple approach.
     """
     data = []
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Referer': 'https://www.google.com/'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
 
     for url in urls:
@@ -141,14 +86,8 @@ def load_and_parse_urls(urls):
             soup = BeautifulSoup(response.content, 'lxml')
             
             # Use a more generic approach to find content
-            text_content = ""
-            if 'wikipedia.org' in url:
-                main_content = soup.find('div', id='mw-content-text')
-                if main_content:
-                    text_content = main_content.get_text()
-            else:
-                paragraphs = soup.find_all('p')
-                text_content = "\n".join([p.get_text() for p in paragraphs])
+            paragraphs = soup.find_all('p')
+            text_content = "\n".join([p.get_text() for p in paragraphs])
                 
             if text_content:
                 data.append(Document(page_content=text_content, metadata={'source': url}))
@@ -197,14 +136,14 @@ if process_url_clicked:
         summarized_docs = []
         progress_bar = st.sidebar.progress(0)
         
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            future_to_doc = {executor.submit(generate_summary_with_gemini, doc.page_content): doc for doc in docs}
-            for i, future in enumerate(future_to_doc):
-                summary = future.result()
-                doc = future_to_doc[future]
-                doc.page_content = summary
-                summarized_docs.append(doc)
-                progress_bar.progress((i + 1) / len(docs))
+        # Sequentially process each document
+        for i, doc in enumerate(docs):
+            prompt = f"Summarize the following article text concisely: {doc.page_content}"
+            summary = get_llm_response(prompt)
+            doc.page_content = summary
+            summarized_docs.append(doc)
+            progress_bar.progress((i + 1) / len(docs))
+            time.sleep(10)  # A simple delay to prevent hitting rate limits
         
         st.sidebar.info("Creating vectorstore from summarized documents...")
         vectorstore = get_vectorstore(summarized_docs)
@@ -225,14 +164,14 @@ if query:
 
         st.info("Searching for relevant information...")
         
-        # Limit retrieved chunks to top 2 for efficiency
         retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 2})
         relevant_docs = retriever.get_relevant_documents(query)
         
         context = " ".join([doc.page_content for doc in relevant_docs])
 
         st.info("Answering your question using the Gemini API...")
-        answer = answer_query_with_gemini(query, context)
+        prompt = f"Answer the following question based on the provided articles. If the information is not in the articles, say so. Question: {query}. Articles: {context}"
+        answer = get_llm_response(prompt)
         
         st.subheader("Answer")
         st.write(answer)
