@@ -33,9 +33,9 @@ process_url_clicked = st.sidebar.button("Process URLs")
 file_path = "faiss_index"
 
 # ----------------- LLM API Calls -----------------
-def get_llm_response(prompt):
+def get_llm_response(prompt, max_retries=5, base_delay=5):
     """
-    Makes a single call to the Gemini API with a given prompt.
+    Makes a single call to the Gemini API with a given prompt and handles rate limits with exponential backoff.
     """
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key={API_KEY}"
     
@@ -51,22 +51,30 @@ def get_llm_response(prompt):
         'Content-Type': 'application/json'
     }
 
-    try:
-        response = requests.post(url, headers=headers, data=json.dumps(payload))
-        response.raise_for_status()
-        
-        result = response.json()
-        text = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'No response available.')
-        return text
-    except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 429:
-            st.error("Rate limit exceeded. Please wait and try again.")
-        else:
+    retries = 0
+    while retries < max_retries:
+        try:
+            response = requests.post(url, headers=headers, data=json.dumps(payload))
+            response.raise_for_status()
+            
+            result = response.json()
+            text = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'No response available.')
+            return text
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:
+                st.warning(f"Rate limit hit. Retrying in {base_delay} seconds...")
+                time.sleep(base_delay)
+                retries += 1
+                base_delay *= 2  # Exponential backoff
+            else:
+                st.error(f"Error calling Gemini API: {e}")
+                return "Failed to get a response due to an API error."
+        except requests.exceptions.RequestException as e:
             st.error(f"Error calling Gemini API: {e}")
-        return "Failed to get a response due to an API error."
-    except requests.exceptions.RequestException as e:
-        st.error(f"Error calling Gemini API: {e}")
-        return "Failed to get a response due to an API error."
+            return "Failed to get a response due to an API error."
+    
+    st.error("Maximum retries reached for API call. Please try again later.")
+    return "Failed to get a response after multiple retries."
 
 # ----------------- Custom URL Loader -----------------
 def load_and_parse_urls(urls):
@@ -126,7 +134,7 @@ if process_url_clicked:
         
         st.sidebar.info("Splitting text into chunks...")
         text_splitter = RecursiveCharacterTextSplitter(
-            separators=["\n\n", "\n", ".", ","],
+            separators=["\n\n", "\n", ","],
             chunk_size=2000,
             chunk_overlap=200
         )
@@ -136,14 +144,13 @@ if process_url_clicked:
         summarized_docs = []
         progress_bar = st.sidebar.progress(0)
         
-        # Sequentially process each document
+        # Sequentially process each document with an intelligent delay
         for i, doc in enumerate(docs):
             prompt = f"Summarize the following article text concisely: {doc.page_content}"
             summary = get_llm_response(prompt)
             doc.page_content = summary
             summarized_docs.append(doc)
             progress_bar.progress((i + 1) / len(docs))
-            time.sleep(10)  # A simple delay to prevent hitting rate limits
         
         st.sidebar.info("Creating vectorstore from summarized documents...")
         vectorstore = get_vectorstore(summarized_docs)
