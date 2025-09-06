@@ -1,5 +1,9 @@
 import streamlit as st
 import os
+import requests
+import json
+import time
+
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQAWithSourcesChain
@@ -12,6 +16,14 @@ from transformers import pipeline
 st.set_page_config(page_title="News Research Tool", layout="wide")
 st.title("📰 News Research Tool")
 
+# Gemini API key
+# Note: This reads the key from the secrets.toml file for secure deployment.
+try:
+    API_KEY = st.secrets["GEMINI_API_KEY"]
+except KeyError:
+    st.error("Please set your Gemini API key in Streamlit secrets.")
+    st.stop()
+
 # ----------------- Sidebar Inputs -----------------
 urls = []
 for i in range(3):
@@ -23,6 +35,67 @@ process_url_clicked = st.sidebar.button("Process URLs")
 
 # FAISS index file path
 file_path = "faiss_index"
+
+# ----------------- LLM API Calls -----------------
+def generate_summary_with_gemini(text):
+    """
+    Generates a summary of the provided text using the Gemini API.
+    """
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key={API_KEY}"
+    
+    # Construct the payload for the API call
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": f"Summarize the following article text concisely: {text}"}
+            ]
+        }]
+    }
+
+    headers = {
+        'Content-Type': 'application/json'
+    }
+
+    try:
+        response = requests.post(url, headers=headers, data=json.dumps(payload))
+        response.raise_for_status()  # Raise an exception for bad status codes
+        
+        result = response.json()
+        summary = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'No summary available.')
+        return summary
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error calling Gemini API: {e}")
+        return "Failed to get summary due to an API error."
+
+def answer_query_with_gemini(question, context):
+    """
+    Answers a question based on the provided context using the Gemini API.
+    """
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key={API_KEY}"
+    
+    # Construct the payload for the API call
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": f"Answer the following question based on the provided articles. If the information is not in the articles, say so. Question: {question}. Articles: {context}"}
+            ]
+        }]
+    }
+
+    headers = {
+        'Content-Type': 'application/json'
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, data=json.dumps(payload))
+        response.raise_for_status()
+        
+        result = response.json()
+        answer = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'No answer available.')
+        return answer
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error calling Gemini API: {e}")
+        return "Failed to get an answer due to an API error."
 
 # ----------------- Vectorstore Loader/Creator -----------------
 def get_vectorstore(docs):
@@ -39,7 +112,7 @@ def get_vectorstore(docs):
         vectorstore.save_local(file_path)
     return vectorstore
 
-# ----------------- Process URLs (Small Model for Summarization) -----------------
+# ----------------- Process URLs (Cloud-based Summarization) -----------------
 if process_url_clicked:
     if not urls:
         st.sidebar.error("Please enter at least one URL.")
@@ -48,36 +121,30 @@ if process_url_clicked:
         loader = UnstructuredURLLoader(urls=urls)
         data = loader.load()
 
-        st.sidebar.info("Splitting text...")
+        st.sidebar.info("Splitting text into chunks...")
         text_splitter = RecursiveCharacterTextSplitter(
             separators=["\n\n", "\n", ".", ","],
-            chunk_size=2000,       # safe for small model (~500 tokens)
+            chunk_size=2000,
             chunk_overlap=200
         )
         docs = text_splitter.split_documents(data)
 
-        st.sidebar.info("Summarizing chunks using FLAN-T5-Small...")
-        pipe_summarizer = pipeline(
-            "text2text-generation",
-            model="google/flan-t5-small",
-            max_new_tokens=150,
-            device="cpu"
-        )
-        summarizer = HuggingFacePipeline(pipeline=pipe_summarizer)
-
+        st.sidebar.info("Summarizing chunks using Gemini API...")
         summarized_docs = []
-        for doc in docs:
-            content = doc.page_content
-            if len(content) > 2000:  # enforce safe length
-                content = content[:2000]
-            summary = summarizer(content)
+        progress_bar = st.sidebar.progress(0)
+        
+        for i, doc in enumerate(docs):
+            summary = generate_summary_with_gemini(doc.page_content)
             doc.page_content = summary
             summarized_docs.append(doc)
-
+            progress_bar.progress((i + 1) / len(docs))
+            time.sleep(0.5) # small delay to prevent API rate limiting
+        
+        st.sidebar.info("Creating vectorstore from summarized documents...")
         vectorstore = get_vectorstore(summarized_docs)
-        st.sidebar.success("Processing completed!")
+        st.sidebar.success("Processing completed! Your knowledge base is ready.")
 
-# ----------------- User Query (Large Model for QA) -----------------
+# ----------------- User Query (Cloud-based QA) -----------------
 query = st.text_input("Ask a question about the articles:")
 
 if query:
@@ -90,26 +157,21 @@ if query:
         )
         vectorstore = FAISS.load_local(file_path, embeddings, allow_dangerous_deserialization=True)
 
-        st.sidebar.info("Using FLAN-T5-Large to answer your question...")
-        pipe = pipeline(
-            "text2text-generation",
-            model="google/flan-t5-large",
-            max_new_tokens=512,
-            device="cpu"
-        )
-        llm = HuggingFacePipeline(pipeline=pipe)
-
-        # Limit retrieved chunks to top 2 for CPU efficiency
+        st.info("Searching for relevant information...")
+        
+        # Limit retrieved chunks to top 2 for efficiency
         retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 2})
-        chain = RetrievalQAWithSourcesChain.from_llm(llm=llm, retriever=retriever)
+        relevant_docs = retriever.get_relevant_documents(query)
+        
+        context = " ".join([doc.page_content for doc in relevant_docs])
 
-        st.info("Processing your query...")
-        result = chain.invoke({"question": query}, return_only_outputs=True)
-
+        st.info("Answering your question using the Gemini API...")
+        answer = answer_query_with_gemini(query, context)
+        
         st.subheader("Answer")
-        st.write(result["answer"])
+        st.write(answer)
 
-        if result.get("sources"):
+        if relevant_docs:
             st.subheader("Sources")
-            for source in result["sources"].split("\n"):
-                st.write(source)
+            for doc in relevant_docs:
+                st.write(doc.metadata.get('source', 'Unknown source'))
