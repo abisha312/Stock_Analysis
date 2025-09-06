@@ -6,11 +6,12 @@ import time
 
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain.chains import RetrievalQAWithSourcesChain
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import UnstructuredURLLoader
 from langchain_community.llms import HuggingFacePipeline
 from transformers import pipeline
+from bs4 import BeautifulSoup
+from langchain.docstore.document import Document
 
 # ----------------- Streamlit Page Config -----------------
 st.set_page_config(page_title="News Research Tool", layout="wide")
@@ -97,6 +98,30 @@ def answer_query_with_gemini(question, context):
         st.error(f"Error calling Gemini API: {e}")
         return "Failed to get an answer due to an API error."
 
+# ----------------- Custom URL Loader -----------------
+def load_and_parse_urls(urls):
+    """
+    Manually loads and parses content from URLs to avoid issues with UnstructuredURLLoader.
+    """
+    data = []
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+    for url in urls:
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Find the main content div for Wikipedia articles
+            main_content = soup.find('div', id='mw-content-text')
+            if main_content:
+                text = main_content.get_text()
+                data.append(Document(page_content=text, metadata={'source': url}))
+            else:
+                st.warning(f"Could not find main content for URL: {url}")
+        except requests.exceptions.RequestException as e:
+            st.error(f"Failed to load URL {url}. Error: {e}")
+    return data
+
 # ----------------- Vectorstore Loader/Creator -----------------
 def get_vectorstore(docs):
     embeddings = HuggingFaceEmbeddings(
@@ -117,17 +142,8 @@ if process_url_clicked:
     if not urls:
         st.sidebar.error("Please enter at least one URL.")
     else:
-        st.sidebar.info("Loading articles...")
-        loader = UnstructuredURLLoader(urls=urls)
-        
-        # Add a custom user-agent to the requests to avoid being blocked by some sites.
-        # This is a common practice to mimic a web browser.
-        try:
-            loader.requests_kwargs = {'headers': {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}}
-            data = loader.load()
-        except Exception as e:
-            st.error(f"Failed to load URLs. The website might be blocking the request. Error: {e}")
-            data = []
+        st.sidebar.info("Loading and parsing articles...")
+        data = load_and_parse_urls(urls)
 
         if not data:
             st.stop()
