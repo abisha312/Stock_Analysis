@@ -136,7 +136,7 @@ if process_url_clicked:
         st.sidebar.info("Splitting text into chunks...")
         text_splitter = RecursiveCharacterTextSplitter(
             separators=["\n\n", "\n", ","],
-            chunk_size=2000,
+            chunk_size=5000,
             chunk_overlap=200
         )
         docs = text_splitter.split_documents(data)
