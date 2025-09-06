@@ -22,11 +22,15 @@ except KeyError:
     st.stop()
 
 # ----------------- Sidebar Inputs -----------------
+st.sidebar.title("Configuration")
 urls = []
 for i in range(3):
     url = st.sidebar.text_input(f"News URL {i+1}")
     if url:
         urls.append(url)
+
+chunk_size = st.sidebar.slider("Chunk Size", min_value=1000, max_value=8000, value=2000, step=500)
+chunk_overlap = st.sidebar.slider("Chunk Overlap", min_value=0, max_value=500, value=200, step=50)
 
 process_url_clicked = st.sidebar.button("Process URLs")
 
@@ -136,8 +140,8 @@ if process_url_clicked:
         st.sidebar.info("Splitting text into chunks...")
         text_splitter = RecursiveCharacterTextSplitter(
             separators=["\n\n", "\n", ","],
-            chunk_size=2000,
-            chunk_overlap=200
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap
         )
         docs = text_splitter.split_documents(data)
 
@@ -150,8 +154,8 @@ if process_url_clicked:
             summary = get_llm_response(prompt)
             return Document(page_content=summary, metadata=doc.metadata)
 
-        # Use ThreadPoolExecutor with a limited number of workers
-        with ThreadPoolExecutor(max_workers=2) as executor:
+        # Use ThreadPoolExecutor with a limited number of workers to prevent rate limits
+        with ThreadPoolExecutor(max_workers=1) as executor:
             future_to_doc = {executor.submit(summarize_doc, doc): doc for doc in docs}
             for i, future in enumerate(future_to_doc):
                 summary_doc = future.result()
