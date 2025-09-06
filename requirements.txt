@@ -1,13 +1,9 @@
 streamlit==1.49.1
+requests
+beautifulsoup4
+lxml
 langchain>=0.0.354
 langchain-community
 sentence-transformers
 faiss-cpu
-unstructured
-transformers>=4.35.0
-torch>=2.1.0
-rich
 langchain-huggingface
-requests
-beautifulsoup4
-lxml
