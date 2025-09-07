@@ -2,8 +2,8 @@
 A web app for intelligent news research that scrapes, summarizes, and answers questions from multiple articles using AI.
 
 ## 🖼 Preview
-<img src="new_fly1.png" alt="Family Tree Demo" width="600"/>
-<img src="new_fly2.png" alt="Family Tree Demo" width="600"/>
+<img src="na1.png" alt="News Article Demo" width="600"/>
+<img src="na2.png" alt="News Article Demo" width="600"/>
 
 ##  🔥 Features
 ✅ URL Processing: Easily input up to three news article links.
